@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install readline
+        run: sudo apt-get install -y libreadline-dev
+
+      - name: Build
+        run: clang++ -std=c++17 -O2 -o shellfish shellfish.cpp -lreadline
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./shellfish
