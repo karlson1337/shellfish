@@ -13,7 +13,6 @@ char cwd[PATH_MAX];
 char prev_dir[PATH_MAX];
 std::string history_path = (std::string(getenv("HOME")) + "/.shellfish_history");
 
-
 int runCmd(std::vector<char*> args)
 {
     if (strcmp(args[0], "exit") == 0) 
@@ -44,7 +43,15 @@ int runCmd(std::vector<char*> args)
     }
 
     if(strcmp(args[0], "echo") == 0)
-        if (args[1][0] == '$') { std::cout << getenv(args[1] + 1) << "\n"; return 0; }
+    {
+        if(!args[1]) {return 0;}
+        if (args[1] && args[1][0] == '$') 
+        { 
+            const char *val = getenv(args[1] + 1);
+            std::cout << (val ? val : "");  
+            return 0; 
+        }
+    }
 
     int child = fork();
     if(child < 0) 
@@ -57,7 +64,7 @@ int runCmd(std::vector<char*> args)
         signal(SIGINT, SIG_DFL);
         int r = execvp(args[0], args.data());
         perror(args[0]);
-        exit(0);
+        exit(1);
     }
     else
     {
@@ -95,14 +102,12 @@ int prompt(char *username, char *hostname)
         }
         if(!text.empty()) words.push_back(text);
 
+        if(words.empty()) return 0;
+
         int n = words.size();
         
-
         std::vector<char*> args(n + 1);
-        for(int i = 0; i < n; i++)
-        {
-            args[i] = const_cast<char*>(words[i].c_str());
-        }
+        for(int i = 0; i < n; i++) { args[i] = const_cast<char*>(words[i].c_str()); }
         args[n] = NULL;
 
         return runCmd(args);
@@ -123,9 +128,6 @@ int main()
     
     gethostname(hostname, sizeof(hostname));
 
-    while(true)
-    {
-        prompt(username, hostname);
-    }
+    while(true) { prompt(username, hostname); }
     return 0;
 }
