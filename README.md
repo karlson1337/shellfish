@@ -1,5 +1,5 @@
 # shellfish
-A personal unix shell built for fun
+A personal *nix shell built for fun
 
 ## Requirements
 - Linux x86_64
