@@ -14,7 +14,7 @@ char prev_dir[PATH_MAX];
 std::string history_path = (std::string(getenv("HOME")) + "/.shellfish_history");
 
 
-int runCmd(char *args[])
+int runCmd(std::vector<char*> args)
 {
     if (strcmp(args[0], "exit") == 0) 
     {
@@ -55,7 +55,7 @@ int runCmd(char *args[])
     else if(child == 0)
     {
         signal(SIGINT, SIG_DFL);
-        int r = execvp(args[0], args);
+        int r = execvp(args[0], args.data());
         perror(args[0]);
         exit(0);
     }
@@ -98,7 +98,7 @@ int prompt(char *username, char *hostname)
         int n = words.size();
         
 
-        char *args[n+1];
+        std::vector<char*> args(n + 1);
         for(int i = 0; i < n; i++)
         {
             args[i] = const_cast<char*>(words[i].c_str());
