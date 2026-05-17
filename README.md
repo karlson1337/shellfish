@@ -6,5 +6,5 @@ A personal *nix shell built for fun
 - readline library (`sudo apt install libreadline-dev` or similar)
 
 ## Run
-chmod +x shellfish
-./shellfish
+- chmod +x shellfish
+- ./shellfish
