@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <sstream>
 
 #include <string.h>
 #include <unistd.h>
@@ -11,13 +12,13 @@
 
 char cwd[PATH_MAX];
 char prev_dir[PATH_MAX];
-std::string history_path = (std::string(getenv("HOME")) + "/.shellfish_history");
+char history_path[PATH_MAX];
 
-int runCmd(std::vector<char*> args)
+int runCmd(std::vector<char*>& args)
 {
     if (strcmp(args[0], "exit") == 0) 
     {
-        write_history(history_path.c_str());
+        write_history(history_path);
         exit(0);
     }
 
@@ -73,10 +74,52 @@ int runCmd(std::vector<char*> args)
     }
 }
 
+int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
+    int n = splitcmds.size();
+    int prev_fd = -1;
+    for (int i = 0; i < n; i++) {
+        int m = splitcmds[i].size();
+        std::vector<char*> args(m + 1);
+        for (int j = 0; j < m; j++) args[j] = const_cast<char*>(splitcmds[i][j].c_str());
+        args[m] = nullptr;
+
+        int fd[2];
+        if (i < n - 1) pipe(fd);
+        int child = fork();
+        if(child < 0)
+        {
+            perror("fork");
+            return -1;
+        }
+        else if (child == 0) 
+        {
+            signal(SIGINT, SIG_DFL);
+            if (prev_fd != -1) 
+            { 
+                dup2(prev_fd, STDIN_FILENO); 
+                close(prev_fd); 
+            }
+            if (i < n - 1)     
+            { 
+                dup2(fd[1], STDOUT_FILENO); 
+                close(fd[1]); close(fd[0]);
+            }
+            execvp(args[0], args.data());
+            perror(args[0]);
+            exit(1);
+        }
+        
+        if (prev_fd != -1) close(prev_fd);
+        if (i < n - 1) { close(fd[1]); prev_fd = fd[0]; }
+    }
+    for (int i = 0; i < n; i++) wait(nullptr);
+    return 0;
+}
+
 int prompt(char *username, char *hostname)
 {
     std::string text;
-    std::vector<std::string> words;
+    std::vector<std::string> cmds;
 
     if (getcwd(cwd, sizeof(cwd)) != NULL)
     {
@@ -85,8 +128,8 @@ int prompt(char *username, char *hostname)
 
         char *line = readline(prompt.c_str());      
         if (!line) 
-        { 
-            write_history(history_path.c_str());
+        {
+            write_history(history_path);
             exit(0); 
         }
         if (*line) add_history(line);
@@ -94,40 +137,58 @@ int prompt(char *username, char *hostname)
         free(line);
 
         size_t pos = 0;
-        while ((pos = text.find(' ')) != std::string::npos) 
+        while ((pos = text.find('|')) != std::string::npos) 
         {
             std::string token = text.substr(0, pos);
-            if(!token.empty()) words.push_back(token);
+            if(!token.empty()) cmds.push_back(token);
             text.erase(0, pos + 1);
         }
-        if(!text.empty()) words.push_back(text);
+        if(!text.empty()) cmds.push_back(text);
 
-        if(words.empty()) return 0;
+        if(cmds.empty()) return 0;
 
-        int n = words.size();
+        int n = cmds.size();
+        if(n == 0) return -1;
+
+        std::vector<std::vector<std::string>> splitcmds;
         
-        std::vector<char*> args(n + 1);
-        for(int i = 0; i < n; i++) { args[i] = const_cast<char*>(words[i].c_str()); }
-        args[n] = NULL;
+        for (int i = 0; i < n; i++) 
+        {
+            std::vector<std::string> args;
+            std::istringstream iss(cmds[i]);
+            std::string token;
+            while (iss >> token) args.push_back(token);
+            if (!args.empty()) splitcmds.push_back(args);
+        }
 
-        return runCmd(args);
-
+        if (splitcmds.size() == 1) 
+        {
+            int m = splitcmds[0].size();
+            std::vector<char*> args(m + 1);
+            for (int j = 0; j < m; j++) args[j] = const_cast<char*>(splitcmds[0][j].c_str());
+            args[m] = nullptr;
+            return runCmd(args);
+        }
+        else runPipeline(splitcmds);
     }
     return -1;
 }
 
 int main()
-{
+{   
+    strcpy(history_path, getenv("HOME"));
+    strcat(history_path, "/.shellfish_history");
+
     signal(SIGINT, SIG_IGN);
-    FILE *f = fopen(history_path.c_str(), "a");
+    FILE *f = fopen(history_path, "a");
     if(f) fclose(f);
 
-    read_history(history_path.c_str());
-    char hostname[256];
+    read_history(history_path);
+    char hostname[HOST_NAME_MAX];
     char *username = getlogin();
     
     gethostname(hostname, sizeof(hostname));
 
-    while(true) { prompt(username, hostname); }
+    while(true) prompt(username, hostname);
     return 0;
 }
