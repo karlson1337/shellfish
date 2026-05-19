@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include<limits.h>
 #include <readline/readline.h>
@@ -63,6 +64,34 @@ int runCmd(std::vector<char*>& args)
     else if(child == 0)
     {
         signal(SIGINT, SIG_DFL);
+        for(int i = 0; i+1 < args.size(); i++)
+        {
+            if((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1]) //args[i+1] for null check
+            {
+                int fd;
+                if(strcmp(args[i],">") == 0)
+                    fd = open(args[i+1], O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
+                else if(strcmp(args[i],">>") == 0)
+                    fd = open(args[i+1], O_CREAT|O_WRONLY|O_APPEND, S_IRWXU);
+                if(fd == -1) exit(1);
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+                args.erase(args.begin() + i);
+                args.erase(args.begin() + i);
+                i--;
+            }
+            if((strcmp(args[i], "<") == 0) && args[i+1]) //args[i+1] for null check
+            {
+                int fd;
+                fd = open(args[i+1], O_RDONLY);
+                if(fd == -1) exit(1);
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+                args.erase(args.begin() + i);
+                args.erase(args.begin() + i);
+                i--;
+            }
+        }
         int r = execvp(args[0], args.data());
         perror(args[0]);
         exit(1);
@@ -94,6 +123,36 @@ int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
         else if (child == 0) 
         {
             signal(SIGINT, SIG_DFL);
+
+            for(int i = 0; i+1 < args.size(); i++)
+            {
+                if((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1]) //args[i+1] for null check
+                {
+                    int fd;
+                    if(strcmp(args[i],">") == 0)
+                        fd = open(args[i+1], O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
+                    else if(strcmp(args[i],">>") == 0)
+                        fd = open(args[i+1], O_CREAT|O_WRONLY|O_APPEND, S_IRWXU);
+                    if(fd == -1) exit(1);
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                    args.erase(args.begin() + i);
+                    args.erase(args.begin() + i);
+                    i--;
+                }
+                if((strcmp(args[i], "<") == 0) && args[i+1]) //args[i+1] for null check
+                {
+                    int fd;
+                    fd = open(args[i+1], O_RDONLY);
+                    if(fd == -1) exit(1);
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                    args.erase(args.begin() + i);
+                    args.erase(args.begin() + i);
+                    i--;
+                }
+            }
+
             if (prev_fd != -1) 
             { 
                 dup2(prev_fd, STDIN_FILENO); 
