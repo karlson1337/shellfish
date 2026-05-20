@@ -15,7 +15,39 @@ char cwd[PATH_MAX];
 char prev_dir[PATH_MAX];
 char history_path[PATH_MAX];
 
-int runCmd(std::vector<char*>& args)
+void io_redir(std::vector<char*>& args)
+{
+    for(int i = 0; i+1 < args.size(); i++)
+    {
+        if((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1]) //args[i+1] for null check
+        {
+            int fd;
+            if(strcmp(args[i],">") == 0)
+                fd = open(args[i+1], O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
+            else if(strcmp(args[i],">>") == 0)
+                fd = open(args[i+1], O_CREAT|O_WRONLY|O_APPEND, S_IRWXU);
+            if(fd == -1) exit(1);
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            args.erase(args.begin() + i);
+            args.erase(args.begin() + i);
+            i--;
+        }
+        if((strcmp(args[i], "<") == 0) && args[i+1]) //args[i+1] for null check
+        {
+            int fd;
+            fd = open(args[i+1], O_RDONLY);
+            if(fd == -1) exit(1);
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+            args.erase(args.begin() + i);
+            args.erase(args.begin() + i);
+            i--;
+        }
+    }
+}
+
+int builtins(std::vector<char*>& args)
 {
     if (strcmp(args[0], "exit") == 0) 
     {
@@ -29,6 +61,7 @@ int runCmd(std::vector<char*>& args)
         {
             strcpy(prev_dir, cwd);
             chdir(getenv("HOME"));
+            getcwd(cwd, sizeof(cwd));
             return 0;
         }
         if(strcmp(args[1], "-") == 0) 
@@ -37,10 +70,13 @@ int runCmd(std::vector<char*>& args)
             strcpy(temp, prev_dir);
             strcpy(prev_dir, cwd);
             chdir(temp);
+            getcwd(cwd, sizeof(cwd));
             return 0;
         }
         strcpy(prev_dir, cwd);
         chdir(args[1] ? args[1] : getenv("HOME")); 
+        getcwd(cwd, sizeof(cwd));
+
         return 0;
     }
 
@@ -53,7 +89,15 @@ int runCmd(std::vector<char*>& args)
             std::cout << (val ? val : "");  
             return 0; 
         }
+        else for (int i = 1; args[i]; i++) std::cout << args[i] << (args[i+1] ? " " : "\n");
+        return 0;
     }
+    return 1;
+}
+
+int run_cmd(std::vector<char*>& args)
+{
+    if(!builtins(args)) return 0;
 
     int child = fork();
     if(child < 0) 
@@ -64,34 +108,7 @@ int runCmd(std::vector<char*>& args)
     else if(child == 0)
     {
         signal(SIGINT, SIG_DFL);
-        for(int i = 0; i+1 < args.size(); i++)
-        {
-            if((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1]) //args[i+1] for null check
-            {
-                int fd;
-                if(strcmp(args[i],">") == 0)
-                    fd = open(args[i+1], O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
-                else if(strcmp(args[i],">>") == 0)
-                    fd = open(args[i+1], O_CREAT|O_WRONLY|O_APPEND, S_IRWXU);
-                if(fd == -1) exit(1);
-                dup2(fd, STDOUT_FILENO);
-                close(fd);
-                args.erase(args.begin() + i);
-                args.erase(args.begin() + i);
-                i--;
-            }
-            if((strcmp(args[i], "<") == 0) && args[i+1]) //args[i+1] for null check
-            {
-                int fd;
-                fd = open(args[i+1], O_RDONLY);
-                if(fd == -1) exit(1);
-                dup2(fd, STDIN_FILENO);
-                close(fd);
-                args.erase(args.begin() + i);
-                args.erase(args.begin() + i);
-                i--;
-            }
-        }
+        io_redir(args);
         int r = execvp(args[0], args.data());
         perror(args[0]);
         exit(1);
@@ -103,13 +120,13 @@ int runCmd(std::vector<char*>& args)
     }
 }
 
-int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
-    int n = splitcmds.size();
+int run_pipeline(std::vector<std::vector<std::string>>& split_cmds) {
+    int n = split_cmds.size();
     int prev_fd = -1;
     for (int i = 0; i < n; i++) {
-        int m = splitcmds[i].size();
+        int m = split_cmds[i].size();
         std::vector<char*> args(m + 1);
-        for (int j = 0; j < m; j++) args[j] = const_cast<char*>(splitcmds[i][j].c_str());
+        for (int j = 0; j < m; j++) args[j] = const_cast<char*>(split_cmds[i][j].c_str());
         args[m] = nullptr;
 
         int fd[2];
@@ -124,35 +141,6 @@ int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
         {
             signal(SIGINT, SIG_DFL);
 
-            for(int i = 0; i+1 < args.size(); i++)
-            {
-                if((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1]) //args[i+1] for null check
-                {
-                    int fd;
-                    if(strcmp(args[i],">") == 0)
-                        fd = open(args[i+1], O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
-                    else if(strcmp(args[i],">>") == 0)
-                        fd = open(args[i+1], O_CREAT|O_WRONLY|O_APPEND, S_IRWXU);
-                    if(fd == -1) exit(1);
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                    args.erase(args.begin() + i);
-                    args.erase(args.begin() + i);
-                    i--;
-                }
-                if((strcmp(args[i], "<") == 0) && args[i+1]) //args[i+1] for null check
-                {
-                    int fd;
-                    fd = open(args[i+1], O_RDONLY);
-                    if(fd == -1) exit(1);
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
-                    args.erase(args.begin() + i);
-                    args.erase(args.begin() + i);
-                    i--;
-                }
-            }
-
             if (prev_fd != -1) 
             { 
                 dup2(prev_fd, STDIN_FILENO); 
@@ -163,6 +151,22 @@ int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
                 dup2(fd[1], STDOUT_FILENO); 
                 close(fd[1]); close(fd[0]);
             }
+
+            if(strcmp(args[0], "echo") == 0)
+            {
+                if(!args[1]) {exit(0);}
+                if (args[1] && args[1][0] == '$') 
+                { 
+                    const char *val = getenv(args[1] + 1);
+                    std::cout << (val ? val : "") << std::endl;
+                    exit(0); 
+                }
+                else for (int i = 1; args[i]; i++) std::cout << args[i] << (args[i+1] ? " " : "\n");
+                exit(0);
+            }
+
+            io_redir(args);
+
             execvp(args[0], args.data());
             perror(args[0]);
             exit(1);
@@ -175,10 +179,38 @@ int runPipeline(std::vector<std::vector<std::string>>& splitcmds) {
     return 0;
 }
 
+std::vector<std::vector<std::string>> splitcmds(std::string& text)
+{
+    std::vector<std::string> cmds;
+
+    size_t pos = 0;
+    while ((pos = text.find('|')) != std::string::npos) 
+    {
+        std::string token = text.substr(0, pos);
+        if(!token.empty()) cmds.push_back(token);
+        text.erase(0, pos + 1);
+    }
+    if(!text.empty()) cmds.push_back(text);
+
+    int n = cmds.size();
+
+    std::vector<std::vector<std::string>> split_cmds;
+    
+    for (int i = 0; i < n; i++) 
+    {
+        std::vector<std::string> args;
+        std::istringstream iss(cmds[i]);
+        std::string token;
+        while (iss >> token) args.push_back(token);
+        if (!args.empty()) split_cmds.push_back(args);
+    }
+    return split_cmds;
+
+}
+
 int prompt(char *username, char *hostname)
 {
     std::string text;
-    std::vector<std::string> cmds;
 
     if (getcwd(cwd, sizeof(cwd)) != NULL)
     {
@@ -195,45 +227,23 @@ int prompt(char *username, char *hostname)
         text = std::string(line);
         free(line);
 
-        size_t pos = 0;
-        while ((pos = text.find('|')) != std::string::npos) 
+        if(text.empty()) return 1;
+        std::vector<std::vector<std::string>> split_cmds = splitcmds(text);
+
+        if (split_cmds.size() == 1) 
         {
-            std::string token = text.substr(0, pos);
-            if(!token.empty()) cmds.push_back(token);
-            text.erase(0, pos + 1);
-        }
-        if(!text.empty()) cmds.push_back(text);
-
-        if(cmds.empty()) return 0;
-
-        int n = cmds.size();
-        if(n == 0) return -1;
-
-        std::vector<std::vector<std::string>> splitcmds;
-        
-        for (int i = 0; i < n; i++) 
-        {
-            std::vector<std::string> args;
-            std::istringstream iss(cmds[i]);
-            std::string token;
-            while (iss >> token) args.push_back(token);
-            if (!args.empty()) splitcmds.push_back(args);
-        }
-
-        if (splitcmds.size() == 1) 
-        {
-            int m = splitcmds[0].size();
+            int m = split_cmds[0].size();
             std::vector<char*> args(m + 1);
-            for (int j = 0; j < m; j++) args[j] = const_cast<char*>(splitcmds[0][j].c_str());
+            for (int j = 0; j < m; j++) args[j] = const_cast<char*>(split_cmds[0][j].c_str());
             args[m] = nullptr;
-            return runCmd(args);
+            return run_cmd(args);
         }
-        else runPipeline(splitcmds);
+        else run_pipeline(split_cmds);
     }
     return -1;
 }
 
-int main()
+int main(int argc, char *argv[])
 {   
     strcpy(history_path, getenv("HOME"));
     strcat(history_path, "/.shellfish_history");
@@ -247,6 +257,33 @@ int main()
     char *username = getlogin();
     
     gethostname(hostname, sizeof(hostname));
+
+    if(argc > 1 && argv[1])
+    {
+        FILE *script = fopen(argv[1], "r");
+        if (!script) { perror(argv[1]); return 1; }
+        char *line = NULL;
+        size_t len = 0;
+        while (getline(&line, &len, script) != -1) 
+        {
+            std::string text = std::string(line);
+            if (!text.empty() && text.back() == '\n') text.pop_back();
+
+            std::vector<std::vector<std::string>> split_cmds = splitcmds(text);
+            if (split_cmds.size() == 1) 
+            {
+                int m = split_cmds[0].size();
+                std::vector<char*> args(m + 1);
+                for (int j = 0; j < m; j++) args[j] = const_cast<char*>(split_cmds[0][j].c_str());
+                args[m] = nullptr;
+                run_cmd(args);
+            }
+            else run_pipeline(split_cmds);
+        }
+        free(line);
+        fclose(script);
+        return 0;
+    }
 
     while(true) prompt(username, hostname);
     return 0;
