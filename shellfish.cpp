@@ -245,6 +245,9 @@ int prompt(char *username, char *hostname)
 
 int main(int argc, char *argv[])
 {   
+    getcwd(cwd, sizeof(cwd));
+    prev_dir[0] = '\0';
+
     strcpy(history_path, getenv("HOME"));
     strcat(history_path, "/.shellfish_history");
 
