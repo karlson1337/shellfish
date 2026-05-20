@@ -79,19 +79,6 @@ int builtins(std::vector<char*>& args)
 
         return 0;
     }
-
-    if(strcmp(args[0], "echo") == 0)
-    {
-        if(!args[1]) {return 0;}
-        if (args[1] && args[1][0] == '$') 
-        { 
-            const char *val = getenv(args[1] + 1);
-            std::cout << (val ? val : "") << std::endl;  
-            return 0; 
-        }
-        else for (int i = 1; args[i]; i++) std::cout << args[i] << (args[i+1] ? " " : "\n");
-        return 0;
-    }
     return 1;
 }
 
@@ -121,6 +108,7 @@ int run_cmd(std::vector<char*>& args)
 }
 
 int run_pipeline(std::vector<std::vector<std::string>>& split_cmds) {
+    
     int n = split_cmds.size();
     int prev_fd = -1;
     for (int i = 0; i < n; i++) {
@@ -152,19 +140,6 @@ int run_pipeline(std::vector<std::vector<std::string>>& split_cmds) {
                 close(fd[1]); close(fd[0]);
             }
 
-            if(strcmp(args[0], "echo") == 0)
-            {
-                if(!args[1]) {exit(0);}
-                if (args[1] && args[1][0] == '$') 
-                { 
-                    const char *val = getenv(args[1] + 1);
-                    std::cout << (val ? val : "") << std::endl;
-                    exit(0); 
-                }
-                else for (int i = 1; args[i]; i++) std::cout << args[i] << (args[i+1] ? " " : "\n");
-                exit(0);
-            }
-
             io_redir(args);
 
             execvp(args[0], args.data());
@@ -176,6 +151,7 @@ int run_pipeline(std::vector<std::vector<std::string>>& split_cmds) {
         if (i < n - 1) { close(fd[1]); prev_fd = fd[0]; }
     }
     for (int i = 0; i < n; i++) wait(nullptr);
+
     return 0;
 }
 
@@ -204,6 +180,12 @@ std::vector<std::vector<std::string>> splitcmds(std::string& text)
         while (iss >> token) args.push_back(token);
         if (!args.empty()) split_cmds.push_back(args);
     }
+
+    for (auto& cmd : split_cmds)
+        for (std::string& token : cmd)
+        if (!token.empty() && token[0] == '$')
+            token = getenv(token.c_str() + 1) ?: "";
+
     return split_cmds;
 
 }
