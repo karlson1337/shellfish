@@ -86,7 +86,7 @@ int builtins(std::vector<char*>& args)
         if (args[1] && args[1][0] == '$') 
         { 
             const char *val = getenv(args[1] + 1);
-            std::cout << (val ? val : "");  
+            std::cout << (val ? val : "") << std::endl;  
             return 0; 
         }
         else for (int i = 1; args[i]; i++) std::cout << args[i] << (args[i+1] ? " " : "\n");
