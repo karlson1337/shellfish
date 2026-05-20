@@ -4,7 +4,8 @@ A *nix shell built for fun (using C++)
 ## Features:
 - Command history
 - Pipes
-- IO redirection
+- Basic IO redirection (<, >, >>)
+- Basic script parsing (just a command list for now)
 
 ## Requirements
 - Linux x86_64
